@@ -1,0 +1,94 @@
+---
+title: "Practical Machine Learning Project"
+output: html_document
+---
+Data
+The data is a sample from Jawbones database, and contains 160 columns which contain potential features including name, timestamps, device-specific generated data e.g. accelerometer, gyroscopic etc., and user-generated data e.g. exercise type. This particular sample includes data generated from 6 individuals, spanning 20 different dates. 
+There are also columns derived from raw data, including statistics like standard deviation, the mean, variance for the device generated data, reformatted dates, etc.. The user-generated data has significant missing observations, up to 97% of the total rows.
+
+
+
+```{r}
+library(rpart)
+library(ISLR)
+library(boot)
+library(tree)
+library(party)
+```
+
+Analysis
+61 columns were removed from the training and data sets because of gross missing data issues (averaging in 97% missing for these columns). Also, we ommitted date from the possible feature set, as there were only a 1500 - 2000 observation to train with, and we wished to to proceed with as little manipulation of the data as posible.
+
+
+```{r, echo=FALSE}
+
+train <- read.csv('C:/Users/Amadeus/Dropbox/Coursers/Coursera Classes/Practical Machine Learning/Code/pml-training.csv')
+test <- read.csv('C:/Users/Amadeus/Dropbox/Coursers/Coursera Classes/Practical Machine Learning/Code/pml-testing.csv')
+
+
+keep <- c('user_name', 'cvtd_timestamp', 'new_window', 'num_window', 'roll_belt', 'pitch_belt',
+          'yaw_belt', 'total_accel_belt','gyros_belt_x', 'gyros_belt_y', 'gyros_belt_z', 'accel_belt_x',
+          'accel_belt_y', 'accel_belt_z', 'magnet_belt_x', 'magnet_belt_y', 'magnet_belt_z', 'roll_arm',
+          'pitch_arm', 'yaw_arm', 'total_accel_arm', 'gyros_arm_x', 'gyros_arm_y', 'gyros_arm_z',
+          'accel_arm_x', 'accel_arm_y', 'accel_arm_z', 'magnet_arm_x', 'magnet_arm_y', 'magnet_arm_z',
+          'roll_dumbbell', 'pitch_dumbbell', 'yaw_dumbbell', 'total_accel_dumbbell', 'gyros_dumbbell_x',
+          'gyros_dumbbell_y', 'gyros_dumbbell_z', 'accel_dumbbell_x', 'accel_dumbbell_y', 'accel_dumbbell_z',
+          'magnet_dumbbell_x', 'magnet_dumbbell_y','magne_dumbbell_z', 'roll_forearm', 'ptch_forearm',
+          'yaw_forearm', 'total_accel_forearm', 'gyros_forearm_x', 'gyros_forearm_y', 'gyros_forearm_z',
+          'accel_forearm_x', 'accel_forearm_y', 'accel_forearm_z', 'magnet_forearm_x', 'magnet_forearm_y', 
+          'magnet_forearm_z', 'classe')
+
+#We remove the columns with 90 - 97% NA's/blanks
+
+train_sub <- train[, names(train) %in% keep]
+test_sub <- test[, names(test) %in% keep]  
+
+#Remove any NAs/omits I may have missed
+
+train_sub <- na.omit(train_sub)
+test_sub <- na.omit(test_sub)
+
+
+```
+
+Model
+
+We utilize a simple categorical regression tree (CaRT) to understand the effect of all features to the target via the training set. The resultant tree is fairly large (although not as large as the conditional inference tree built). We prune the original CaRT which was built out at full depth, to further mitigate any over-fitting that may be occuring with the training set. We sought to ensure that the misclassification error is lowered through this process
+
+
+```{r, echo = TRUE}
+
+set.seed(123)
+#Regular CART-like tree
+
+mod1 <- tree(classe ~. -cvtd_timestamp, data = train_sub)
+summary(mod1)
+plot(mod1)
+text(mod1, pretty = 1)
+
+#--------------------------------------------------------------------Just experimenting---------------------------------------------------
+#Conditional Inference Tree. ctree d oesn't have the '-' operator as an option, so must manually remove timestamp to create equivalent from above
+
+train_sub_1 <- train_sub[, !(names(train_sub) %in% c('cvtd_timestamp'))]
+
+mod2 <- ctree(classe ~., data = train_sub_1)
+summary(mod2)
+plot(mod2)
+#--------------------------------------------------------------------------------------------
+
+mod1_pred <- predict(mod1, test_sub, type="class")
+
+# We impose cross-validation and pruning techniques to increase efficaciousness of the model
+
+mod1_pred_prune <- cv.tree(mod1, FUN = prune.misclass)
+plot(mod1_pred_prune)  
+prune1 <- prune.misclass(mod1, best = 13)
+plot(prune1)
+text(prune1, pretty = 0)
+
+mod2_pred <- predict(prune1, test_sub, type = "class")
+mod2_pred
+
+
+
+```
